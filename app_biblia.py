@@ -1,57 +1,33 @@
 import streamlit as st
-import sqlite3
-import json
-import numpy as np
-from sentence_transformers import SentenceTransformer
+from consultar_ia import buscar_versiculo, buscar_en_diccionario
 
-# Configuración elegante de la página
-st.set_page_config(page_title="Biblia IA: Estudio Pro", page_icon="📖", layout="wide")
+st.set_page_config(page_title="Biblia de Estudio Pro", page_icon="📖", layout="wide")
 
-@st.cache_resource
-def cargar_modelo():
-    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+st.title("📖 Biblia de Estudio con IA")
+st.markdown("Encuentra sabiduría en la Biblia y el Diccionario Vine.")
 
-modelo = cargar_modelo()
+pregunta = st.text_input("¿Qué deseas investigar hoy?", placeholder="Ej: Redención, Gracia, Esperanza...")
 
-def buscar(pregunta):
-    conexion = sqlite3.connect('biblia_maestra.db')
-    cursor = conexion.cursor()
-    vector_pregunta = modelo.encode(pregunta).tolist()
-    cursor.execute("SELECT libro, capitulo, versiculo, texto, embedding FROM versiculos")
-    resultados = cursor.fetchall()
-    
-    busquedas = []
-    for r in resultados:
-        libro, cap, ver, texto, emb_json = r
-        emb_vector = json.loads(emb_json)
-        similitud = np.dot(vector_pregunta, emb_vector) / (np.linalg.norm(vector_pregunta) * np.linalg.norm(emb_vector))
-        busquedas.append((similitud, libro, cap, ver, texto))
-    
-    busquedas.sort(key=lambda x: x[0], reverse=True)
-    conexion.close()
-    return busquedas[:5]
+if pregunta:
+    # Creamos las pestañas para organizar la info
+    tab1, tab2 = st.tabs(["📜 Versículos de la IA", "📚 Diccionario Vine"])
 
-# --- DISEÑO DE LA INTERFAZ ---
-st.markdown("<h1 style='text-align: center; color: #4A90E2;'>📖 Biblia de Estudio con IA</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Encuentra sabiduría basada en el significado de tus palabras.</p>", unsafe_allow_html=True)
+    with tab1:
+        st.subheader("Resultados de Estudio")
+        resultados = buscar_versiculo(pregunta) # Llama a tu motor de IA
+        if resultados:
+            for sim, libro, cap, ver, texto in resultados:
+                with st.expander(f"📍 {libro} {cap}:{ver} - Coincidencia {int(sim*100)}%"):
+                    st.write(texto)
+        else:
+            st.write("No se encontraron versículos relacionados.")
 
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.subheader("🔍 Panel de Búsqueda")
-    pregunta = st.text_area("¿Qué buscas hoy?", placeholder="Ej: Necesito consuelo para un amigo que perdió a alguien...")
-    boton = st.button("Consultar a la IA")
-
-with col2:
-    st.subheader("📜 Resultados de Estudio")
-    if boton and pregunta:
-        with st.spinner('Escudriñando las Escrituras...'):
-            res = buscar(pregunta)
-            for sim, lib, cap, ver, texto in res:
-                porcentaje = int(sim * 100)
-                with st.expander(f"📍 {lib} {cap}:{ver} - Coincidencia {porcentaje}%"):
-                    st.write(f"*{texto}*")
-                    st.progress(sim)
-                    st.caption("Usa este versículo para tu estudio personal de hoy.")
-    else:
-        st.info("Escribe algo a la izquierda para comenzar el análisis.")
+    with tab2:
+        st.subheader("Definiciones del Diccionario")
+        definiciones = buscar_en_diccionario(pregunta)
+        if definiciones is not None and not definiciones.empty:
+            for i, row in definiciones.iterrows():
+                with st.expander(f"📙 {row['topic']}"):
+                    st.write(row['definition'])
+        else:
+            st.info("No hay una definición exacta en el diccionario para esta palabra.")
